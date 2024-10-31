@@ -7,8 +7,8 @@ import pandas as pd
 
 from core.backtest import find_best_params
 from core.model.backtest_config import BacktestConfigFactory
-from core.utils.log_kit import logger, divider
-from core.version import sys_version, build_version
+from core.utils.log_kit import logger
+from core.version import version_prompt
 
 # ====================================================================================================
 # ** 脚本运行前配置 **
@@ -32,8 +32,7 @@ pd.set_option('display.unicode.east_asian_width', True)
 
 
 if __name__ == '__main__':
-    divider(f'版本: {sys_version}，当前时间:', '#', _logger=logger)
-    logger.debug(f'BUILD VERSION: {build_version}')
+    version_prompt()
     logger.info(f'系统启动中，稍等...')
 
     # ====================================================================================================

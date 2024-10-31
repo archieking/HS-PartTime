@@ -9,8 +9,8 @@ import pandas as pd
 from core.backtest import find_best_params
 from core.figure import plotly_plot
 from core.model.backtest_config import BacktestConfigFactory
-from core.utils.log_kit import logger, divider
-from core.version import sys_version, build_version
+from core.utils.log_kit import logger
+from core.version import version_prompt
 
 from config import factor_param_range_dict, strategy_list, params_plot_type
 from core.utils.path_kit import get_file_path
@@ -47,15 +47,6 @@ def run(factor, plot_type='Y'):
     backtest_factory = BacktestConfigFactory.init(factor_param_range_dict=factor_param_range_dict)
     backtest_factory.generate_configs_by_factor(factor)
 
-    # 检查配置是否有问题
-    if factor not in map(lambda x: x[0], backtest_factory.factor_list | backtest_factory.filter_list):
-        logger.error('配置不匹配，目前策略如下：')
-        for backtest_config in backtest_factory.config_list:
-            logger.debug(f'- {backtest_config.get_fullname()}')
-        logger.critical(f'策略并没有使用目标因子：{factor}')
-        logger.info(f'请检查 `config.py` 中的策略，和现在需要循环的factor({factor})是否匹配')
-        exit(1)
-
     # ====================================================================================================
     # 3. 寻找最优参数
     # ====================================================================================================
@@ -71,22 +62,16 @@ def run(factor, plot_type='Y'):
     # 读取所有参数的历年表现结果
     all_df = pd.DataFrame()
     for conf in backtest_factory.config_list:
-        df = pd.read_csv(conf.get_result_folder() / f'{plot_type_file_dict[plot_type]}.csv', encoding='gbk',
+        df = pd.read_csv(conf.get_result_folder() / f'{plot_type_file_dict[plot_type]}.csv', encoding='utf-8-sig',
                          index_col='candle_begin_time')
         # df.rename(columns={'涨跌幅': sheet_df.loc[conf.get_fullname(), f'#FACTOR-{factor}']}, inplace=True)
 
-        df = df[['累积净值', '收益回撤比', '最大回撤']]
-        # df.rename(columns={'累积净值': f'{sheet_df.loc[conf.get_fullname(), factor]}累积净值',
-        #                    '收益回撤比': f'{sheet_df.loc[conf.get_fullname(), factor]}收益回撤比',
-        #                    '最大回撤': f'{sheet_df.loc[conf.get_fullname(), factor]}最大回撤',
-        #                    }, inplace=True)
-        # df.rename(columns={'累积净值': sheet_df.loc[conf.get_fullname(), f'#FACTOR-{factor}累积净值'],
-        #                    '收益回撤比': sheet_df.loc[conf.get_fullname(), f'#FACTOR-{factor}收益回撤比'],
-        #                    '最大回撤': sheet_df.loc[conf.get_fullname(), f'#FACTOR-{factor}最大回撤'],
-        #                    }, inplace=True)
+        df = df[['累积净值', '收益回撤比']]
+        # df = df[['累积净值', '收益回撤比', '最大回撤']]
+
         df.rename(columns={'累积净值': sheet_df.loc[conf.get_fullname(), f'#FACTOR-{factor}'] + '累积净值',
                            '收益回撤比': sheet_df.loc[conf.get_fullname(), f'#FACTOR-{factor}'] + '收益回撤比',
-                           '最大回撤': sheet_df.loc[conf.get_fullname(), f'#FACTOR-{factor}'] + '最大回撤',
+                           # '最大回撤': sheet_df.loc[conf.get_fullname(), f'#FACTOR-{factor}'] + '最大回撤',
                            }, inplace=True)
 
         if all_df.empty:
@@ -123,18 +108,16 @@ def run(factor, plot_type='Y'):
     res_name = f"{pre}_{factor}_L{strategy_list[0]['long_select_coin_num']}S{strategy_list[0]['short_select_coin_num']}_{strategy_list[0]['factor_list'][0][1]}{filter}"
 
     all_df.to_csv(get_file_path('data', '遍历结果', f'{res_name}.csv'))
-    print(all_df)
+    # print(all_df)
 
     logger.ok(f'完成参数平原结果输出，花费时间：{time.time() - s_time:.3f}秒')
 
     # 绘图
-    some_folder = list(backtest_factory.result_folders)[0]  # 拿出factory中任意一个config使用的folder
-    plotly_plot(all_df, some_folder, f'参数平原图_{res_name}')
+    plotly_plot(all_df, backtest_factory.result_folder, f'参数平原图_{res_name}')
 
 
 if __name__ == '__main__':
-    divider(f'版本: {sys_version}，当前时间:', '#', _logger=logger)
-    logger.debug(f'BUILD VERSION: {build_version}')
+    version_prompt()
     logger.info(f'系统启动中，稍等...')
 
     # ====================================================================================================

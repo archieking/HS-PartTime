@@ -1,13 +1,15 @@
 """
 选币策略框架
 """
+import shutil
+from datetime import datetime
 from itertools import product
 from pathlib import Path
 from typing import List, Dict, Optional
 
 import pandas as pd
 
-from config import backtest_path
+from config import backtest_path, backtest_iter_path, backtest_name
 from core.model.account_type import AccountType
 from core.model.rebalance_mode import RebalanceMode
 from core.model.strategy_config import StrategyConfig, FactorConfig, FilterFactorConfig
@@ -20,33 +22,33 @@ from core.utils.strategy_hub import StrategyHub
 class BacktestConfig:
     data_file_fingerprint: str = ''  # 记录数据文件的指纹
 
-    def __init__(self, name: str, **config):
+    def __init__(self, name: str, **conf):
         self.name: str = name  # 账户名称，建议用英文，不要带有特殊符号
-        self.logger = config.get("logger", default_logger)
+        self.logger = conf.get("logger", default_logger)
 
-        self.start_date: str = config.get("start_date", '2021-01-01')  # 回测开始时间
-        self.end_date: str = config.get("end_date", '2024-03-30')  # 回测结束时间
+        self.start_date: str = conf.get("start_date", '2021-01-01')  # 回测开始时间
+        self.end_date: str = conf.get("end_date", '2024-03-30')  # 回测结束时间
 
         # 账户回测交易模拟配置
-        self.account_type: AccountType = AccountType.translate(config.get("account_type", '普通账户'))  # 账户类型
-        self.rebalance_mode: RebalanceMode = RebalanceMode.init(config.get('rebalance_mode', None))
-        self.avg_price_col: str = config.get("avg_price_col", 'avg_price_1m')  # 平均成交价格
-        self.initial_usdt: int | float = config.get("initial_usdt", 10000)  # 初始现金
-        self.leverage: int | float = config.get("leverage", 1)  # 杠杆数。我看哪个赌狗要把这里改成大于1的。高杠杆如梦幻泡影。不要想着一夜暴富，脚踏实地赚自己该赚的钱。
-        self.margin_rate = config.get('margin_rate', 0.05)  # 维持保证金率，净值低于这个比例会爆仓
+        self.account_type: AccountType = AccountType.translate(conf.get("account_type", '普通账户'))  # 账户类型
+        self.rebalance_mode: RebalanceMode = RebalanceMode.init(conf.get('rebalance_mode', None))
+        self.avg_price_col: str = conf.get("avg_price_col", 'avg_price_1m')  # 平均成交价格
+        self.initial_usdt: int | float = conf.get("initial_usdt", 10000)  # 初始现金
+        self.leverage: int | float = conf.get("leverage", 1)  # 杠杆数。我看哪个赌狗要把这里改成大于1的。高杠杆如梦幻泡影。不要想着一夜暴富，脚踏实地赚自己该赚的钱。
+        self.margin_rate = conf.get('margin_rate', 0.05)  # 维持保证金率，净值低于这个比例会爆仓
 
-        self.swap_c_rate: float = config.get("swap_c_rate", 6e-4)  # 合约买卖手续费
-        self.spot_c_rate: float = config.get("spot_c_rate", 2e-3)  # 现货买卖手续费
+        self.swap_c_rate: float = conf.get("swap_c_rate", 6e-4)  # 合约买卖手续费
+        self.spot_c_rate: float = conf.get("spot_c_rate", 2e-3)  # 现货买卖手续费
 
-        self.swap_min_order_limit: int | float = config.get("swap_min_order_limit", 5)  # 合约最小下单量
-        self.spot_min_order_limit: int | float = config.get("spot_min_order_limit", 10)  # 现货最小下单量
+        self.swap_min_order_limit: int | float = conf.get("swap_min_order_limit", 5)  # 合约最小下单量
+        self.spot_min_order_limit: int | float = conf.get("spot_min_order_limit", 10)  # 现货最小下单量
 
         # 策略配置
-        self.black_list: List[str] = config.get('black_list',
-                                                [])  # 拉黑名单，永远不会交易。不喜欢的币、异常的币。例：LUNA-USDT, 这里与实盘不太一样，需要有'-'
-        self.white_list: List[str] = config.get('white_list',
-                                                [])  # 如果不为空，即只交易这些币，只在这些币当中进行选币。例：LUNA-USDT, 这里与实盘不太一样，需要有'-'
-        self.min_kline_num: int = config.get('min_kline_num', 168)  # 最少上市多久，不满该K线根数的币剔除，即剔除刚刚上市的新币。168：标识168个小时，即：7*24
+        self.black_list: List[str] = conf.get('black_list',
+                                              [])  # 拉黑名单，永远不会交易。不喜欢的币、异常的币。例：LUNA-USDT, 这里与实盘不太一样，需要有'-'
+        self.white_list: List[str] = conf.get('white_list',
+                                              [])  # 如果不为空，即只交易这些币，只在这些币当中进行选币。例：LUNA-USDT, 这里与实盘不太一样，需要有'-'
+        self.min_kline_num: int = conf.get('min_kline_num', 168)  # 最少上市多久，不满该K线根数的币剔除，即剔除刚刚上市的新币。168：标识168个小时，即：7*24
 
         # 再择时配置
         self.timing: Optional[TimingSignal] = None
@@ -63,12 +65,13 @@ class BacktestConfig:
         # 策略列表，包含每个策略的详细配置
         self.strategy_list: List[StrategyConfig] = []
         self.strategy_name_list: List[str] = []
+        self.strategy_list_raw: List[dict] = []
 
         # 策略评价
         self.report: Optional[pd.DataFrame] = None
 
         # 遍历标记
-        self.iter_round = 0  # 遍历的INDEX，0表示非遍历场景，从1、2、3、4、...开始表示是第几个循环
+        self.iter_round: int | str = 0  # 遍历的INDEX，0表示非遍历场景，从1、2、3、4、...开始表示是第几个循环，当然也可以赋值为具体名称
 
     def __repr__(self):
         return f"""{'+' * 56}
@@ -105,6 +108,7 @@ class BacktestConfig:
         return f'{self.name}' if as_folder_name else fullname
 
     def load_strategy_config(self, strategy_list: list | tuple, re_timing_config=None):
+        self.strategy_list_raw = strategy_list
         # 所有策略中的权重
         all_cap_weight = sum(item["cap_weight"] for item in strategy_list)
 
@@ -130,7 +134,7 @@ class BacktestConfig:
             if stg_cfg.hold_period not in self.hold_period_list:
                 self.hold_period_list.append(stg_cfg.hold_period)
                 # 更新最大的持仓周期
-                if int(self.max_hold_period[:-1]) < int(stg_cfg.hold_period[:-1]):
+                if pd.to_timedelta(self.max_hold_period) < pd.to_timedelta(stg_cfg.hold_period):
                     self.max_hold_period = stg_cfg.hold_period
 
             self.is_use_spot = self.is_use_spot or stg_cfg.is_use_spot
@@ -203,18 +207,16 @@ class BacktestConfig:
         report['param'] = self.get_fullname()
         self.report = report
 
-    def set_name_suffix(self, suffix):
-        self.name += suffix
-
     def get_result_folder(self) -> Path:
         if self.iter_round == 0:
             return get_folder_path(backtest_path, self.get_fullname(as_folder_name=True), as_path_type=True)
         else:
-            iter_path = get_folder_path(backtest_path.parent, '遍历结果')
-            return get_folder_path(iter_path,
-                                   self.get_fullname(as_folder_name=True),
-                                   f'参数组合_{self.iter_round}',
-                                   as_path_type=True)
+            return get_folder_path(
+                backtest_iter_path,
+                self.name,
+                f'参数组合_{self.iter_round}' if isinstance(self.iter_round, int) else self.iter_round,
+                as_path_type=True
+            )
 
     def get_strategy_config_sheet(self, with_factors=True) -> dict:
         factor_dict = {}
@@ -246,6 +248,9 @@ class BacktestConfig:
     def save(self):
         pd.to_pickle(self, self.get_result_folder() / 'config.pkl')
 
+    def delete_cache(self):
+        shutil.rmtree(self.get_result_folder())
+
 
 class BacktestConfigFactory:
     """
@@ -263,38 +268,41 @@ class BacktestConfigFactory:
         'short_filter_list_post',
     ]
 
-    def __init__(self, **config):
+    def __init__(self, **conf):
         # ====================================================================================================
         # ** 参数遍历配置 **
         # 可以指定因子遍历的参数范围
         # ====================================================================================================
-        self.factor_param_range_dict: dict = config.get("factor_param_range_dict", {})
-        self.strategy_param_range_dict: dict = config.get("strategy_param_range_dict", {})
-        self.default_param_range = config.get("default_param_range", [])
-        self.backtest_name = config.get("backtest_name", "")
+        self.factor_param_range_dict: dict = conf.get("factor_param_range_dict", {})
+        self.strategy_param_range_dict: dict = conf.get("strategy_param_range_dict", {})
+        self.default_param_range = conf.get("default_param_range", [])
+        self.backtest_name = conf.get("backtest_name", backtest_name)
+
+        if not self.backtest_name:
+            self.backtest_name = f'默认策略-{datetime.now().strftime("%Y%m%dT%H%M%S")}'
 
         # 缓存全局配置
-        self.is_use_spot = config.get("is_use_spot", False)
-        self.black_list = config.get("black_list", set())
+        self.is_use_spot = conf.get("is_use_spot", False)
+        self.black_list = conf.get("black_list", set())
 
         # 存储生成好的config list和strategy list
         self.config_list: List[BacktestConfig] = []
         self.strategy_list: List[StrategyConfig] = []
 
-        # 缓存所有的选币因子和过滤因子
-        self.factor_list: set = set()  # 选币因子
-        self.filter_list: set = set()  # 过滤因子
-        self.filter_list_legacy: set = set()  # 旧的过滤因子
-        self.result_folders = set()
+        default_logger.info(f'遍历结果输出路径：{self.result_folder}')
 
     @classmethod
-    def init(cls, **config):
+    def init(cls, **conf):
         return cls(
-            factor_param_range_dict=config.get("factor_param_range_dict", {}),
-            strategy_param_range_dict=config.get("strategy_param_range_dict", {}),
-            default_param_range=config.get("default_param_range", []),
-            backtest_name=config.get("backtest_name", ""),
+            factor_param_range_dict=conf.get("factor_param_range_dict", {}),
+            strategy_param_range_dict=conf.get("strategy_param_range_dict", {}),
+            default_param_range=conf.get("default_param_range", []),
+            backtest_name=conf.get("backtest_name", backtest_name),
         )
+
+    @property
+    def result_folder(self) -> Path:
+        return get_folder_path(backtest_iter_path, self.backtest_name, as_path_type=True)
 
     def update_meta_by_config(self, config: BacktestConfig):
         """
@@ -304,21 +312,6 @@ class BacktestConfigFactory:
         """
         self.is_use_spot = self.is_use_spot or config.is_use_spot
         self.black_list = self.black_list | set(config.black_list)
-        self.result_folders.add(config.get_result_folder())
-
-        for stg in config.strategy_list:
-            self.factor_list = self.factor_list | set(
-                [f.to_tuple() for f in stg.all_factors if isinstance(f, FactorConfig)])
-
-            # 旧的过滤因子
-            if stg.use_custom_func:
-                self.filter_list_legacy = self.filter_list_legacy | set(
-                    [f.to_tuple(full_mode=False) for f in stg.all_factors if
-                     isinstance(f, FilterFactorConfig)])
-            else:  # 新的过滤因子
-                self.filter_list = self.filter_list | set(
-                    [f.to_tuple(full_mode=True) for f in stg.all_factors if
-                     isinstance(f, FilterFactorConfig)])
 
     def get_candidates_by_factors(self, strategy_dict, param_name, target_factors, val_index) -> List[tuple]:
         """
@@ -479,8 +472,8 @@ class BacktestConfigFactory:
             if len(backtest_config.strategy_list) == 0:
                 default_logger.critical(f'【{suffix}场景】没有生成有效的子策略回测回测，可能所有选币都被重置为0，跳过')
                 continue
-
-            backtest_config.set_name_suffix(suffix)
+            backtest_config.name = self.backtest_name
+            backtest_config.iter_round = suffix
 
             self.update_meta_by_config(backtest_config)
 
@@ -499,16 +492,10 @@ class BacktestConfigFactory:
         return self.generate_configs(target_factors)
 
     def generate_all_factor_config(self):
-        import config
         backtest_config = BacktestConfig.init_from_config(load_strategy_list=False)
-        strategy_list = [{
-            **{
-                k: v for k, v in strategy_dict.items() if k not in self.STRATEGY_FACTOR_ATTR
-            },
-            'factor_list': self.factor_list,
-            'filter_list': self.filter_list_legacy if strategy_dict.get('use_custom_func', True) else self.filter_list,
-        } for strategy_dict in config.strategy_list]
-
+        strategy_list = []
+        for conf in self.config_list:
+            strategy_list.extend(conf.strategy_list_raw)
         backtest_config.load_strategy_config(strategy_list)
         return backtest_config
 

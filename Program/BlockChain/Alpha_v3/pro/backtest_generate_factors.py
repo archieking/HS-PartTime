@@ -1,8 +1,8 @@
 """
 寻找最优参数
 """
-import sys
 import os
+import sys
 
 from core.backtest import find_best_params
 
@@ -16,8 +16,8 @@ sys.path.append(parent_dir)
 import warnings
 import pandas as pd
 from core.model.backtest_config import BacktestConfigFactory
-from core.utils.log_kit import logger, divider
-from core.version import sys_version, build_version
+from core.utils.log_kit import logger
+from core.version import version_prompt
 import os
 
 # ====================================================================================================
@@ -34,8 +34,7 @@ pd.set_option('display.unicode.ambiguous_as_wide', True)  # 设置命令行输�
 pd.set_option('display.unicode.east_asian_width', True)
 
 if __name__ == '__main__':
-    divider(f'版本: {sys_version}，当前时间:', '#', _logger=logger)
-    logger.debug(f'BUILD VERSION: {build_version}')
+    version_prompt()
     logger.info(f'系统启动中，稍等...')
 
     # ====================================================================================================
@@ -69,6 +68,7 @@ if __name__ == '__main__':
                     "filter_list": [
                         ('PctChange', n, 'pct:<0.8')  # 因子名（和factors文件中相同），参数
                     ],
+                    "use_custom_func": False
                 }
                 strategies.append([strategy])
 

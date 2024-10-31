@@ -6,15 +6,15 @@
 import os
 from pathlib import Path
 
-from core.utils.path_kit import get_folder_path, get_file_path
+from core.utils.path_kit import get_folder_path
 
 # ====================================================================================================
 # ** 回测策略细节配置 **
 # 需要配置需要的策略以及遍历的参数范围
 # ====================================================================================================
 # region 回测策略细节配置
-start_date = '2021-01-01'  # 回测开始时间
-end_date = '2024-10-05'  # 回测结束时间
+start_date = '2020-01-01'  # 回测开始时间
+end_date = '2024-10-25'  # 回测结束时间
 
 backtest_name = '回测组'  # 回测组名称。可以自己任意取。一般建议，一个回测组，就是实盘中的一个账户。
 
@@ -58,7 +58,6 @@ params_plot_type = 'Y'
 # 策略配置
 min_kline_num = 168  # 最少上市多久，不满该K线根数的币剔除，即剔除刚刚上市的新币。168：标识168个小时，即：7*24
 black_list = []  # 拉黑名单，永远不会交易。不喜欢的币、异常的币。例：LUNA-USDT, 这里与实盘不太一样，需要有'-'
-# black_list = ['BTCUSDT', 'ETHUSDT', 'WBTCUSDT', 'WBETHUSDT', 'BNBUSDT', 'SOLUSDT']  # 拉黑名单，永远不会交易。不喜欢的币、异常的币。例：LUNA-USDT, 这里与实盘不太一样，需要有'-'
 white_list = []  # 如果不为空，即只交易这些币，只在这些币当中进行选币。例：LUNA-USDT, 这里与实盘不太一样，需要有'-'
 
 # 模拟下单回测设置

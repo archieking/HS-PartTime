@@ -1,26 +1,24 @@
-"""
-选币策略框架
-"""
-import hashlib
-import shutil
-
-from core.model.backtest_config import BacktestConfig
-from core.utils.path_kit import get_file_path
-
 # -*- coding: utf-8 -*-
 """
 选币策略框架
 """
+import hashlib
+
 import gc
+import shutil
 import warnings
-from pathlib import Path
-from typing import Dict
 
 import numba as nb
 import numpy as np
 import pandas as pd
 
-from config import stable_symbol, backtest_path, swap_path, spot_path
+from config import stable_symbol, swap_path, spot_path
+from pathlib import Path
+from typing import Dict
+
+from core.model.backtest_config import BacktestConfig
+from core.utils.log_kit import logger
+from core.utils.path_kit import get_file_path
 
 warnings.filterwarnings('ignore')
 
@@ -93,12 +91,12 @@ def load_spot_and_swap_data(conf: BacktestConfig) -> (pd.DataFrame, pd.DataFrame
     :param conf: 回测配置
     :return:
     """
-    print('清理数据缓存')
+    logger.debug('清理数据缓存')
     cache_path = get_file_path('data', 'cache', as_path_type=True)
     if cache_path.exists():
         shutil.rmtree(cache_path)
 
-    print('加载现货和合约数据...')
+    logger.debug('加载现货和合约数据...')
     # 读入合约数据
     symbol_swap_candle_data = pd.read_pickle(swap_path)
     # 过滤掉不能用于交易的币种
@@ -202,4 +200,4 @@ def calc_factor_md5(df: pd.DataFrame, data_size: int = 100) -> str:
 def save_performance_df_csv(conf: BacktestConfig, **kwargs):
     for name, df in kwargs.items():
         file_path = conf.get_result_folder() / f'{name}.csv'
-        df.to_csv(file_path, encoding='gbk')
+        df.to_csv(file_path, encoding='utf-8-sig')

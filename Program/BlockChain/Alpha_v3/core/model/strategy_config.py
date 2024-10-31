@@ -16,7 +16,7 @@ from core.utils.strategy_hub import DummyStrategy
 
 def filter_series_by_range(series, range_str):
     # 提取运算符和数值
-    operator = range_str[:2] if range_str[:2] in ['>=', '<='] else range_str[0]
+    operator = range_str[:2] if range_str[:2] in ['>=', '<=', '==', '!='] else range_str[0]
     value = float(range_str[len(operator):])
 
     match operator:
@@ -26,6 +26,8 @@ def filter_series_by_range(series, range_str):
             return series <= value
         case '==':
             return series == value
+        case '!=':
+            return series != value
         case '>':
             return series > value
         case '<':
@@ -122,7 +124,7 @@ class FilterFactorConfig:
 
     @staticmethod
     def check_value(range_str):
-        _operator = range_str[:2] if range_str[:2] in ['>=', '<='] else range_str[0]
+        _operator = range_str[:2] if range_str[:2] in ['>=', '<=', '==', '!='] else range_str[0]
         try:
             _ = float(range_str[len(_operator):])
         except ValueError as e:
@@ -284,6 +286,8 @@ class StrategyConfig:
             use_custom_func = False
         else:
             use_custom_func = config.get('use_custom_func', True)
+        config['use_custom_func'] = use_custom_func  # 重置config，否则后面实例化配置还是错的，导致因子文件无法生成
+
         long_filter_list = config.get('long_filter_list', filter_list)
         short_filter_list = config.get('short_filter_list', filter_list)
         new_filter_param = [len(item) > 2 for item in set(long_filter_list) | set(short_filter_list)]
@@ -292,7 +296,7 @@ class StrategyConfig:
             exit()
         old_filter_param = [len(item) <= 2 for item in set(long_filter_list) | set(short_filter_list)]
         if any(old_filter_param) and not use_custom_func:
-            logger.error('策略中包含老的因子，但没有配置filter过滤规则，请检查config中策略的的 filter_list 参数')
+            logger.error('策略中包含老的因子，但没有配置filter过滤规则，请检查config中策略的 filter_list 参数')
             exit()
 
         config['long_filter_list'] = [FilterFactorConfig.init(item) for item in long_filter_list]
@@ -419,7 +423,8 @@ class StrategyConfig:
     def calc_select_factor(self, df) -> pd.DataFrame:
         # 如果没有通过新的配置启动的话，使用原来的 `strategy` 中定义的函数计算
         if self.use_custom_func:
-            return self.calc_factor(df, external_list=self.factor_list)
+            # 1.2.1 新增：调用自定义函数的时候，把conf的对象传递给函数获取详细配置
+            return self.calc_factor(df, external_list=self.factor_list, conf=self)
 
         # ========= 以上代码是为了兼容历史代码而写的 ========
         # 计算多头因子
@@ -436,7 +441,8 @@ class StrategyConfig:
 
     def filter_before_select(self, df):
         if self.use_custom_func:
-            return self.before_filter(df, ex_filter_list=self.filter_list)
+            # 1.2.1 新增：调用自定义函数的时候，把conf的对象传递给函数获取详细配置
+            return self.before_filter(df, ex_filter_list=self.filter_list, conf=self)
 
         # ========= 以上代码是为了兼容历史代码而写的 ========
         # 过滤多空因子

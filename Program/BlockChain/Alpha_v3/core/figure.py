@@ -1,6 +1,7 @@
 """
 中性策略框架
 """
+from pathlib import Path
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -50,8 +51,8 @@ def draw_equity_curve_plotly(df, data_dict, date_col=None, right_axis=None, pic_
     if right_axis:
         key = list(right_axis.keys())[0]
         fig.add_trace(go.Scatter(x=time_data, y=draw_df[right_axis[key]], name=key + '(右轴)',
-                                 #  marker=dict(color='rgba(220, 220, 220, 0.8)'),
-                                 marker_color='orange',
+                                 marker=dict(color='rgba(220, 220, 220, 0.8)'),
+                                 # marker_color='orange',
                                  opacity=0.1, line=dict(width=0),
                                  fill='tozeroy',
                                  yaxis='y2'))  # 标明设置一个不同于trace1的一个坐标轴
@@ -104,7 +105,7 @@ def draw_equity_curve_plotly(df, data_dict, date_col=None, right_axis=None, pic_
         fig.show()
 
 
-def plotly_plot(draw_df: pd.DataFrame, save_dir: str, name: str):
+def plotly_plot(draw_df: pd.DataFrame, save_dir: str | Path, name: str):
     rows = len(draw_df.columns)
     s = (1 / (rows - 1)) * 0.5
     fig = subplots.make_subplots(rows=rows, cols=2, shared_xaxes=False, shared_yaxes=False, vertical_spacing=s)
@@ -140,7 +141,7 @@ def plotly_plot(draw_df: pd.DataFrame, save_dir: str, name: str):
 
 
 def mat_heatmap(draw_df: pd.DataFrame, name: str):
-    sns.set()  # 设置一下展示的主题和样式
+    sns.set_theme()  # 设置一下展示的主题和样式
     plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS', 'DejaVu Sans']
     plt.title(name)  # 设置标题
     sns.heatmap(draw_df, annot=True, xticklabels=draw_df.columns, yticklabels=draw_df.index, fmt='.2f')  # 画图

@@ -44,15 +44,14 @@ if __name__ == '__main__':
     logger.debug(f'BUILD VERSION: {build_version}')
     logger.info(f'系统启动中，稍等...')
 
-    factor = 'Pvrsixqq'  # 因子名称
-    sl_coin_list = [1, 2]  # 多空选币
-    is_use_spot = False  # 是否使用现货
-    ascending_list = [False]  # 因子排序
+    factor = 'Adapt_err_xqq'
+    sl_coin_list = [1, 2]
+    is_use_spot = False
+    ascending = False
     plot_type = 'Y'
     filter_list = []
     long_filter_list = [
         ('涨跌幅max', 24, 'val:<=0.2'),  # 因子名（和factors文件中相同），参数 rank排名 val数值 pct百分比
-        # ('VolumeMix', 24, 'pct:<=0.2', False)  # 因子名（和factors文件中相同），参数
     ]
     short_filter_list = [
         ('涨跌幅max', 24, 'val:<=0.2')  # 因子名（和factors文件中相同），参数
@@ -61,25 +60,24 @@ if __name__ == '__main__':
     strategies = []
     for sl_coin in sl_coin_list:
         for factor_para in [_ for _ in range(10, 201, 10)]:
-            for ascending in ascending_list:
-                strategy = {
-                    "strategy": "Strategy_Base",
-                    "offset_list": [0],
-                    "hold_period": "1H",
-                    "is_use_spot": is_use_spot,
-                    "long_select_coin_num": sl_coin,
-                    "short_select_coin_num": sl_coin,
-                    "cap_weight": 1,
-                    "long_cap_weight": 1,  # 策略内多头资金权重
-                    "short_cap_weight": 1,  # 空头资金占比
-                    "factor_list": [
-                        (factor, ascending, factor_para, 1)  # 多头因子名（和factors文件中相同），排序方式，参数，权重。
-                    ],
-                    "long_filter_list": long_filter_list,
-                    "short_filter_list": short_filter_list,
-                    "use_custom_func": False  # 使用系统内置因子计算、过滤函数
-                }
-                strategies.append([strategy])
+            strategy = {
+                "strategy": "Strategy_Base",
+                "offset_list": [0],
+                "hold_period": "1H",
+                "is_use_spot": is_use_spot,
+                "long_select_coin_num": sl_coin,
+                "short_select_coin_num": sl_coin,
+                "cap_weight": 1,
+                "long_cap_weight": 1,  # 策略内多头资金权重
+                "short_cap_weight": 1,  # 空头资金占比
+                "factor_list": [
+                    (factor, ascending, factor_para, 1)  # 多头因子名（和factors文件中相同），排序方式，参数，权重。
+                ],
+                "long_filter_list": long_filter_list,
+                "short_filter_list": short_filter_list,
+                "use_custom_func": False  # 使用系统内置因子计算、过滤函数
+            }
+            strategies.append([strategy])
     #
     factory = BacktestConfigFactory.init(backtest_name=backtest_name)
     factory.generate_configs_by_strategies(strategies=strategies)
@@ -104,8 +102,9 @@ if __name__ == '__main__':
     # 读取所有参数的历年表现结果
     all_df = pd.DataFrame()
     for conf in factory.config_list:
-        df = pd.read_csv(conf.get_result_folder() / f'{plot_type_file_dict[plot_type]}.csv', encoding='gbk',
+        df = pd.read_csv(conf.get_result_folder() / f'{plot_type_file_dict[plot_type]}.csv', encoding='utf-8-sig',
                          index_col='candle_begin_time')
+        # conf.get_fullname().split(',')[1]conf.get_fullname().split(',')[3]
         df = df[['累积净值', '收益回撤比', '最大回撤']]
         temp = conf.get_fullname().split(',')
         df.rename(columns={
@@ -125,13 +124,13 @@ if __name__ == '__main__':
     all_df.index.name = None
     all_df = all_df.T
 
-    all_df.to_csv(get_file_path('data', '遍历结果', 'temp.csv'))
+    # all_df.to_csv(get_file_path('data', '遍历结果', 'temp.csv'))
     print(all_df)
 
     logger.ok(f'完成参数平原结果输出，花费时间：{time.time() - s_time:.3f}秒')
 
     # 绘图
-    some_folder = list(factory.result_folders)[0]  # 拿出factory中任意一个config使用的folder
+    # some_folder = list(factory.result_folders)[0]  # 拿出factory中任意一个config使用的folder
     for slc in sl_coin_list:
         draw_df = all_df[all_df.index.str.contains(f'L{slc}S{slc}')]
         draw_df = draw_df.reset_index(drop=False)
@@ -148,18 +147,17 @@ if __name__ == '__main__':
             for f in filter_list:
                 filter_name += f"{f}"
 
-        if len(long_filter_list) > 0 :
+        if len(long_filter_list) > 0:
             filter_name += '_LF'
             for f in long_filter_list:
                 filter_name += f"{f}"
 
-        if len(short_filter_list) > 0 :
+        if len(short_filter_list) > 0:
             filter_name += '_SF'
             for f in short_filter_list:
                 filter_name += f"{f}"
 
-        res_name = f"{pre}_{factor}_L{slc}S{slc}{filter_name}"
+        res_name = f"{pre}_{factor}_L{slc}S{slc}_{ascending}{filter_name}"
         draw_df.to_csv(get_file_path('data', '遍历结果', f'{res_name}.csv'))
 
-        plotly_plot(draw_df, some_folder, f'参数平原图_{res_name}')
-
+        plotly_plot(draw_df, factory.result_folder, f'参数平原图_{res_name}')

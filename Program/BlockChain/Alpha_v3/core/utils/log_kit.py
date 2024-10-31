@@ -1,5 +1,5 @@
 """
-这个是我用于日志、输出、调试的日志工具，直接根据这个使用即可，不要去做调整
+日志、输出、调试的日志工具，直接根据这个使用即可，不要去做调整
 
 **使用方式如下**
 ```python
@@ -149,17 +149,21 @@ def get_logger(name=None) -> logging.Logger:
     return SimonsLogger(name).logger
 
 
-def divider(name='', sep='=', _logger=None) -> None:
+def divider(name='', sep='=', _logger=None, with_timestamp=True) -> None:
     """
     画一个带时间戳的横线
     :param name: 中间的名称
     :param sep: 分隔符
     :return: 没有返回值，直接画一条线
     :param _logger: 指定输出的log文件
+    :param with_timestamp: 是否带时间戳
     """
     seperator_len = 82
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    middle = f' {name} {now} '
+    if with_timestamp:
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        middle = f' {name} {now} '
+    else:
+        middle = f' {name}'
     middle_width = get_display_width(middle)
     decoration_count = max(4, (seperator_len - middle_width) // 2)
     line = sep * decoration_count + middle + sep * decoration_count
@@ -172,7 +176,7 @@ def divider(name='', sep='=', _logger=None) -> None:
         _logger.debug(line)
     else:
         logger.debug(line)
-    time.sleep(0.05)
+    time.sleep(0.02)
 
 
 logger = get_logger()

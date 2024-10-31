@@ -5,13 +5,13 @@ import warnings
 
 import pandas as pd
 
-from config import swap_path
+from config import swap_path, backtest_name
 from core.backtest import find_best_params
 from core.evaluate import strategy_evaluate
 from core.figure import draw_equity_curve_plotly
 from core.model.backtest_config import BacktestConfigFactory
-from core.utils.log_kit import logger, divider
-from core.version import sys_version, build_version
+from core.utils.log_kit import logger
+from core.version import version_prompt
 
 # ====================================================================================================
 # ** 脚本运行前配置 **
@@ -37,7 +37,7 @@ def run():
     # 2. 生成策略配置
     # ====================================================================================================
     logger.info(f'生成策略配置...')
-    backtest_factory = BacktestConfigFactory.init()
+    backtest_factory = BacktestConfigFactory.init(backtest_name=f'多空分离-{backtest_name}')
     backtest_factory.generate_long_and_short_configs()
 
     # ====================================================================================================
@@ -56,7 +56,7 @@ def run():
     for conf in backtest_factory.config_list:
         # 读取资金曲线
         result_folder = conf.get_result_folder()  # 自动生成当前存储结果的文件夹
-        df = pd.read_csv(result_folder / '资金曲线.csv', encoding='gbk', parse_dates=['candle_begin_time'])
+        df = pd.read_csv(result_folder / '资金曲线.csv', encoding='utf-8-sig', parse_dates=['candle_begin_time'])
         # 读取策略评价
         rtn, _, _, _ = strategy_evaluate(df, net_col='净值', pct_col='涨跌幅')
         # 合并策略评价数据
@@ -66,10 +66,10 @@ def run():
             rtn_df = pd.concat([rtn_df, rtn], axis=1)
         # 合并资金曲线数据
         df = df[['candle_begin_time', '净值', '净值dd2here']]
-        if '多空模拟' in conf.get_fullname():
+        if '多空模拟' in result_folder.name:
             re_columns = {'净值': '净值_多空', '净值dd2here': '最大回撤_多空'}
             rtn_cols.append('多空模拟')
-        elif '纯多模拟' in conf.get_fullname():
+        elif '纯多模拟' in result_folder.name:
             re_columns = {'净值': '净值_多头', '净值dd2here': '最大回撤_多头'}
             rtn_cols.append('纯多模拟')
         else:
@@ -110,15 +110,13 @@ def run():
     right_axis = {'最大回撤_多空': '最大回撤_多空', '最大回撤_多头': '最大回撤_多头', '最大回撤_空头': '最大回撤_空头'}
 
     # 调用画图函数
-    some_folder = list(backtest_factory.result_folders)[0]  # 拿出factory中任意一个config使用的folder
     draw_equity_curve_plotly(account_df, data_dict=data_dict, date_col='candle_begin_time', right_axis=right_axis,
-                             title='多空资金曲线集合', desc='', path=some_folder / '资金曲线.html')
+                             title='多空资金曲线集合', desc='', path=backtest_factory.result_folder / '资金曲线.html')
     logger.ok(f'生成多空资金曲线集合完成')
 
 
 if __name__ == '__main__':
-    divider(f'版本: {sys_version}，当前时间:', '#', _logger=logger)
-    logger.debug(f'BUILD VERSION: {build_version}')
+    version_prompt()
     logger.info(f'系统启动中，稍等...')
 
     # ===================================================================================================

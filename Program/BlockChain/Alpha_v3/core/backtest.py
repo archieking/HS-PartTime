@@ -5,7 +5,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import pandas as pd
 from tqdm import tqdm
 
-from config import job_num, raw_data_path, backtest_path, backtest_iter_path
+from config import job_num, raw_data_path, backtest_path
 from core.equity import calc_equity, show_plot_performance
 from core.figure import mat_heatmap
 from core.model.backtest_config import BacktestConfig
@@ -109,7 +109,7 @@ def simu_re_timing(conf: BacktestConfig, df_spot_ratio, df_swap_ratio, pivot_dic
     s_time = time.time()
     logger.info(f'{conf.get_fullname(as_folder_name=True)} 资金曲线择时，生成动态杠杆')
 
-    account_df = pd.read_csv(conf.get_result_folder() / '资金曲线.csv', index_col=0, encoding='gbk')
+    account_df = pd.read_csv(conf.get_result_folder() / '资金曲线.csv', index_col=0, encoding='utf-8-sig')
 
     leverage = conf.timing.get_dynamic_leverage(account_df['equity'])
     logger.ok(f'完成生成动态杠杆，花费时间： {time.time() - s_time:.3f}秒')
@@ -164,8 +164,7 @@ def run_backtest(conf: BacktestConfig):
     divider(conf.name, '*')
 
     # 删除缓存
-    # shutil.rmtree(backtest_path, ignore_errors=True)
-    backtest_path.mkdir(parents=True, exist_ok=True)
+    conf.delete_cache()
 
     # 记录一下时间戳
     r_time = time.time()
@@ -217,10 +216,15 @@ def find_best_params(factory: BacktestConfigFactory, show_heat_map=False):
     # 1. 准备工作
     # ====================================================================================================
     divider('参数遍历开始', '*')
-    iter_results_folder = backtest_iter_path / factory.backtest_name
+    iter_results_folder = factory.result_folder
 
     # 删除缓存
     shutil.rmtree(iter_results_folder, ignore_errors=True)
+
+    time.sleep(0.2)  # 给文件系统一点时间，消化一下刚刚删除文件的事情
+
+    # 准备对应的输出文件夹
+    iter_results_folder.mkdir(parents=True, exist_ok=True)
 
     conf_list = factory.config_list
     for index, conf in enumerate(conf_list):

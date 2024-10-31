@@ -12,7 +12,7 @@ from core.equity import calc_equity, show_plot_performance
 from core.model.backtest_config import BacktestConfig
 from core.utils.functions import save_performance_df_csv
 from core.utils.log_kit import logger, divider
-from core.version import sys_version, build_version
+from core.version import version_prompt
 
 # ====================================================================================================
 # ** 脚本运行前配置 **
@@ -43,6 +43,9 @@ def run_backtest(conf: BacktestConfig):
     # 1. 准备工作
     # ====================================================================================================
     divider(conf.name, '*')
+
+    # 删除缓存
+    conf.delete_cache()
 
     # 记录一下时间戳
     r_time = time.time()
@@ -93,8 +96,7 @@ def run_backtest(conf: BacktestConfig):
 
 
 if __name__ == '__main__':
-    divider(f'版本: {sys_version}，当前时间:', '#', _logger=logger)
-    logger.debug(f'BUILD VERSION: {build_version}')
+    version_prompt()
     logger.info(f'系统启动中，稍等...')
 
     backtest_config = BacktestConfig.init_from_config()

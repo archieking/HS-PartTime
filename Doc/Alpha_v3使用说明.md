@@ -54,20 +54,48 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 下载预处理数据
 
-解压缩之后把数据放在[Alpha_v3/data](..%2FProgram%2FBlockChain%2FAlpha_v3%2Fdata)目录下
+解压缩之后把文件夹的路径在 [config.py](config.py)中进行配置 `raw_data_path`
 
+⚠️ 注意：
+
+- `raw_data_path` 需要是绝对路径，不要写成相对路径
+- 路径文件夹下直接能看到所有的 pkl 文件，而不是子文件夹
 
 ### 2. 确认配置文件
 
-确保您的配置文件 [config.py](..%2FProgram%2FBlockChain%2FAlpha_v3%2Fconfig.py) 已正确设置，并放置在项目的根目录或指定的配置文件目录下。
+确保您的配置文件 [config.py](config.py) 已正确设置，并放置在项目的根目录或指定的配置文件目录下。
 
-### 3. 启动程序
+### 3. 启动程序，一键回测
 
-运行[一键回测.py](..%2FProgram%2FBlockChain%2FAlpha_v3%2F%E4%B8%80%E9%94%AE%E5%9B%9E%E6%B5%8B.py)
+使用以下命令运行 `backtest.py` 来启动程序：
 
-### 4. 参数遍历
-运行[一键遍历.py](..%2FProgram%2FBlockChain%2FAlpha_v3%2F%E4%B8%80%E9%94%AE%E9%81%8D%E5%8E%86.py)
+```bash
+python backtest.py
+```
 
+### 4. 启动程序，一键回测多空曲线
+
+使用以下命令运行 `backtest_multi_equity.py` 来启动程序：
+
+```bash
+python backtest_multi_equity.py
+```
+
+### 5. 启动程序，一键遍历参数平原
+
+使用以下命令运行 `backtest_single_param.py` 来启动程序：
+
+```bash
+python backtest_single_param.py
+```
+
+### 5. 启动程序，一键遍历全参数
+
+使用以下命令运行 `backtest_all_params.py` 来启动程序：
+
+```bash
+python backtest_all_params.py
+```
 -----
 
 ## 🗺️ 完整流程
@@ -89,8 +117,7 @@ conda install pandas matplotlib -y
 pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 启动程序
-python 一键回测.py
-python 一键遍历.py
+python backtest.py
 ```
 
 -----

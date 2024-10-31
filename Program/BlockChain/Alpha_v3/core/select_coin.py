@@ -26,8 +26,12 @@ pd.set_option('expand_frame_repr', False)  # 当列太多时不换行
 pd.set_option('display.unicode.ambiguous_as_wide', True)  # 设置命令行输出时的列对齐功能
 pd.set_option('display.unicode.east_asian_width', True)
 
-FACTOR_KLINE_COL_LIST = ['candle_begin_time', 'symbol', 'is_spot', 'close', 'next_close', 'symbol_spot', 'symbol_swap',
-                         '是否交易']
+# 计算完因子之后，保留的字段
+KLINE_COLS = ['candle_begin_time', 'symbol', 'is_spot', 'close', 'next_close', 'symbol_spot', 'symbol_swap', '是否交易']
+# 计算完选币之后，保留的字段
+SELECT_RES_COLS = [*KLINE_COLS, 'strategy', 'cap_weight', '方向', 'offset', 'target_alloc_ratio']
+# 完整kline数据保存的路径
+ALL_KLINE_PATH_TUPLE = ('data', 'cache', 'all_factors_kline.pkl')
 
 
 # ======================================================================================
@@ -167,13 +171,14 @@ def calc_factors_by_candle(candle_df, conf: BacktestConfig, factor_col_name_list
     return kline_with_factor_df
 
 
-def process_candle_df(candle_df: pd.DataFrame, conf: BacktestConfig, factor_col_name_list: List[str]):
+def process_candle_df(candle_df: pd.DataFrame, conf: BacktestConfig, factor_col_name_list: List[str], idx: int):
     """
     # 针对每一个币种的k线数据，按照策略循环计算因子信息
     :param candle_df: 单个币种的数据
     :param conf: backtest config
     :param factor_col_name_list:    因子列表，可以用于动态判断当前需要计算的因子列。
                                     当 factor_col_name_list ≠ conf.factor_col_name_list 时，说明需要节省一点内存
+    :param idx: 索引
     :return: 带有因子数值的数据
     """
     # ==== 数据预处理 ====
@@ -198,7 +203,7 @@ def process_candle_df(candle_df: pd.DataFrame, conf: BacktestConfig, factor_col_
     # 返回带有因子数值的K线数据
     factor_df = calc_factors_by_candle(candle_df, conf, factor_col_name_list)
 
-    return factor_df
+    return idx, factor_df
 
 
 def calc_factors(conf: BacktestConfig):
@@ -227,21 +232,23 @@ def calc_factors(conf: BacktestConfig):
 * 单次计算因子个数：{factor_col_limit} 个，(需分成{len(shards)}组计算)
 * 需要计算币种数量：{len(candle_df_list)} 个''')
 
+    # 清理 cache 的缓存
+    all_kline_pkl = get_file_path(*ALL_KLINE_PATH_TUPLE, as_path_type=True)
+    all_kline_pkl.unlink(missing_ok=True)
+
     for shard_index in shards:
         logger.info(f'因子分片计算中，进度：{int(shard_index / factor_col_limit) + 1}/{len(shards)}')
         factor_col_name_list = conf.factor_col_name_list[shard_index:shard_index + factor_col_limit]
 
-        all_factor_df_list = []
+        all_factor_df_list = [pd.DataFrame()] * len(candle_df_list)
         with ProcessPoolExecutor(max_workers=job_num) as executor:
             futures = [executor.submit(
-                process_candle_df, candle_df, conf, factor_col_name_list
-            ) for candle_df in candle_df_list]
+                process_candle_df, candle_df.copy(), conf, factor_col_name_list, candle_idx
+            ) for candle_idx, candle_df in enumerate(candle_df_list)]
 
             for future in tqdm(as_completed(futures), total=len(candle_df_list), desc='因子计算'):
-                factor_df = future.result()
-                if factor_df is None or factor_df.empty:
-                    continue
-                all_factor_df_list.append(factor_df)
+                idx, factor_df = future.result()
+                all_factor_df_list[idx] = factor_df
 
         # ====================================================================================================
         # 3. ** 合并因子结果 **
@@ -261,15 +268,15 @@ def calc_factors(conf: BacktestConfig):
         logger.debug('分片存储因子结果...')
 
         # 选币需要的k线
-        pkl_path = get_file_path('data', 'cache', 'all_factors_kline.pkl', as_path_type=True)
-        if not pkl_path.exists():
-            all_factors_df[FACTOR_KLINE_COL_LIST].sort_values(by=['candle_begin_time', 'symbol', 'is_spot']).to_pickle(
-                pkl_path)
+        if not all_kline_pkl.exists():
+            all_kline_df = all_factors_df[KLINE_COLS].sort_values(by=['candle_begin_time', 'symbol', 'is_spot'])
+            all_kline_df.to_pickle(all_kline_pkl)
 
         # 针对每一个因子进行存储
         for factor_col_name in factor_col_name_list:
-            all_factors_df[factor_col_name].to_pickle(
-                get_file_path('data', 'cache', f'all_factors_{factor_col_name}.pkl'))
+            factor_pkl = get_file_path('data', 'cache', f'factor_{factor_col_name}.pkl', as_path_type=True)
+            factor_pkl.unlink(missing_ok=True)  # 动态清理掉cache的缓存
+            all_factors_df[factor_col_name].to_pickle(factor_pkl)
 
         del all_factors_df
 
@@ -446,7 +453,7 @@ def select_coins_by_strategy(factor_df, stg_conf: StrategyConfig):
     factor_df.loc[factor_df['方向'] == -1, 'target_alloc_ratio'] = factor_df['target_alloc_ratio'] * (1 - long_ratio)
     factor_df = factor_df[factor_df['target_alloc_ratio'].abs() > 1e-9]  # 去除权重为0的数据
 
-    return factor_df[[*FACTOR_KLINE_COL_LIST, '方向', 'target_alloc_ratio']]
+    return factor_df[[*KLINE_COLS, '方向', 'target_alloc_ratio']]
 
 
 def process_strategy(stg_conf: StrategyConfig, result_folder: Path):
@@ -455,10 +462,10 @@ def process_strategy(stg_conf: StrategyConfig, result_folder: Path):
     logger.debug(f'[{stg_conf.name}] 开始选币...')
 
     # 准备选币用数据
-    factor_df = pd.read_pickle(get_file_path('data', 'cache', 'all_factors_kline.pkl'))
+    factor_df = pd.read_pickle(get_file_path(*ALL_KLINE_PATH_TUPLE))
     for factor_col_name in stg_conf.factor_columns:
         factor_df[factor_col_name] = pd.read_pickle(
-            get_file_path('data', 'cache', f'all_factors_{factor_col_name}.pkl'))
+            get_file_path('data', 'cache', f'factor_{factor_col_name}.pkl'))
     factor_df = factor_df[factor_df['是否交易'] == 1]
 
     condition = (factor_df['is_spot'] == (1 if stg_conf.is_use_spot else 0))
@@ -471,19 +478,12 @@ def process_strategy(stg_conf: StrategyConfig, result_folder: Path):
 
     logger.debug(f'[{stg_conf.name}] 选币数据准备完成，消耗时间：{time.time() - s:.2f}s')
 
-    # 计算md5，检查选币结果是否已存在
-    # factor_df_md5 = calc_factor_md5(factor_df)
-    # hash_file = result_folder / f'{stg_conf.get_fullname(as_folder_name=True)}_hash.txt'
-    # is_valid = check_md5(hash_file, factor_df_md5)
-    #
-    # # 计算选币结果
-    # if is_valid:
-    #     logger.info(f'[{stg_conf.name}] 选币结果已存在，直接返回')
-    #     return
-
     result_df = select_coins_by_strategy(factor_df, stg_conf)
+    # 用于缓存选币结果，如果结果为空，也会生成对应的，空的pkl文件
+    stg_select_result = result_folder / f'{stg_conf.get_fullname(as_folder_name=True)}.pkl'
 
     if result_df.empty:
+        pd.DataFrame(columns=SELECT_RES_COLS).to_pickle(stg_select_result)
         return
 
     del factor_df
@@ -497,11 +497,12 @@ def process_strategy(stg_conf: StrategyConfig, result_folder: Path):
     result_df = result_df[result_df['offset'].isin(stg_conf.offset_list)]
 
     if result_df.empty:
+        pd.DataFrame(columns=SELECT_RES_COLS).to_pickle(stg_select_result)
         return
 
     # 添加其他的相关选币信息
     select_result_dict = dict()
-    for kline_col in FACTOR_KLINE_COL_LIST:
+    for kline_col in KLINE_COLS:
         select_result_dict[kline_col] = result_df[kline_col].values
 
     select_result_dict['方向'] = result_df['方向'].astype('int8').values
@@ -523,12 +524,7 @@ def process_strategy(stg_conf: StrategyConfig, result_folder: Path):
     )
 
     # 缓存到本地文件
-    select_result_df[
-        [*FACTOR_KLINE_COL_LIST, 'strategy', 'cap_weight', '方向', 'offset', 'target_alloc_ratio']
-    ].to_pickle(result_folder / f'{stg_conf.get_fullname(as_folder_name=True)}.pkl')
-
-    # 保存md5文件
-    # save_md5(hash_file, factor_df_md5)
+    select_result_df[SELECT_RES_COLS].to_pickle(stg_select_result)
 
     logger.debug(f'[{strategy_name}] 耗时: {(time.time() - s):.2f}s')
 
@@ -553,15 +549,16 @@ def select_coin_with_conf(conf: BacktestConfig, multi_process=True, silent=False
     # ====================================================================================================
     # 2.1 初始化
     # ====================================================================================================
+    result_folder = conf.get_result_folder()  # 选币结果文件夹
+
     if not multi_process:
         for strategy in conf.strategy_list:
-            process_strategy(strategy, conf.get_result_folder())
+            process_strategy(strategy, result_folder)
         return
 
     # 多进程模式
     with ProcessPoolExecutor() as executor:
-        futures = [executor.submit(process_strategy, strategy, conf.get_result_folder()) for
-                   strategy in conf.strategy_list]
+        futures = [executor.submit(process_strategy, stg, result_folder) for stg in conf.strategy_list]
 
         for future in as_completed(futures):
             try:
@@ -630,50 +627,50 @@ def transfer_swap(select_coin, df_swap):
     return select_coin
 
 
-def concat_select_results(backtest_config: BacktestConfig) -> None:
+def concat_select_results(conf: BacktestConfig) -> None:
     """
     聚合策略选币结果，形成综合选币结果
-    :param backtest_config:
+    :param conf:
     :return:
     """
     # 如果是纯多头现货模式，那么就不转换合约数据，只下现货单
     all_select_result_df_list = []  # 存储每一个策略的选币结果
-    result_folder = backtest_config.get_result_folder()
+    result_folder = conf.get_result_folder()
+    select_result_path = result_folder / '选币结果.pkl'
 
-    for strategy in backtest_config.strategy_list:
-        file_path = result_folder / f'{strategy.get_fullname(as_folder_name=True)}.pkl'
+    for strategy in conf.strategy_list:
+        stg_select_result = result_folder / f'{strategy.get_fullname(as_folder_name=True)}.pkl'
 
         # 如果文件不存在，就跳过
-        if not os.path.exists(file_path):
+        if not os.path.exists(stg_select_result):
             continue
 
-        all_select_result_df_list.append(pd.read_pickle(file_path))
+        all_select_result_df_list.append(pd.read_pickle(stg_select_result))
 
     # 如果没有任何策略的选币结果，就直接返回
     if not all_select_result_df_list:
+        pd.DataFrame(columns=SELECT_RES_COLS).to_pickle(select_result_path)
         return
 
     # 聚合选币结果
     all_select_result_df = pd.concat(all_select_result_df_list, ignore_index=True)
     del all_select_result_df_list
     gc.collect()
-    all_select_result_df.to_pickle(result_folder / '选币结果.pkl')
+    all_select_result_df.to_pickle(select_result_path)
 
 
-def process_select_results(backtest_config: BacktestConfig) -> pd.DataFrame:
-    select_result_path = backtest_config.get_result_folder() / '选币结果.pkl'
+def process_select_results(conf: BacktestConfig) -> pd.DataFrame:
+    select_result_path = conf.get_result_folder() / '选币结果.pkl'
     if not select_result_path.exists():
         logger.warning('没有生成选币文件，直接返回')
-        return pd.DataFrame(
-            columns=[*FACTOR_KLINE_COL_LIST, 'strategy', 'cap_weight', '方向', 'offset', 'target_alloc_ratio']
-        )
+        return pd.DataFrame(columns=SELECT_RES_COLS)
     all_select_result_df = pd.read_pickle(select_result_path)
-    all_factors_df = pd.read_pickle(get_file_path('data', 'cache', 'all_factors_kline.pkl'))
 
     # 不是纯多，且是现货策略
-    if backtest_config.is_use_spot:
+    if conf.is_use_spot:
+        all_kline_df = pd.read_pickle(get_file_path(*ALL_KLINE_PATH_TUPLE))
         # 将含有现货的币种，替换掉其中close价格
-        df_swap = all_factors_df[(all_factors_df['is_spot'] == 0) & (all_factors_df['symbol_spot'] != '')]
+        df_swap = all_kline_df[(all_kline_df['is_spot'] == 0) & (all_kline_df['symbol_spot'] != '')]
         all_select_result_df = transfer_swap(all_select_result_df, df_swap)
 
     return all_select_result_df
