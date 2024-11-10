@@ -163,7 +163,7 @@ def divider(name='', sep='=', _logger=None, with_timestamp=True) -> None:
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         middle = f' {name} {now} '
     else:
-        middle = f' {name}'
+        middle = f' {name} '
     middle_width = get_display_width(middle)
     decoration_count = max(4, (seperator_len - middle_width) // 2)
     line = sep * decoration_count + middle + sep * decoration_count

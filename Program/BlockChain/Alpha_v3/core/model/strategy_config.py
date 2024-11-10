@@ -181,9 +181,13 @@ class StrategyConfig:
     is_use_spot: bool = False  # True：使用现货。False：不使用现货，只使用合约。
 
     # 多头选币数量。1 表示做多一个币; 0.1 表示做多10%的币
-    long_select_coin_num: int | float = 0.1
+    long_select_coin_num: int | float | tuple = 0.1
     # 空头选币数量。1 表示做空一个币; 0.1 表示做空10%的币，'long_nums'表示和多头一样多的数量
-    short_select_coin_num: int | float | str = 'long_nums'  # 注意：多头为0的时候，不能配置'long_nums'
+    short_select_coin_num: int | float | tuple | str = 'long_nums'  # 注意：多头为0的时候，不能配置'long_nums'
+    # 选币范围控制，
+    # 默认为'both'，表示 <= 和 >=；'left' 表示 >= 和 <；'right' 表示 > 和 <=。
+    # 也支持多空分离，比如 ['both', 'left']，表示多头是 both 模式，空头是 left 模式
+    select_inclusive: str | tuple = 'right'
 
     # 多头的选币因子列名。
     long_factor: str = '因子'  # 因子：表示使用复合因子，默认是 factor_list 里面的因子组合。需要修改 calc_factor 函数配合使用
@@ -465,3 +469,25 @@ class StrategyConfig:
     # noinspection PyMethodMayBeStatic,PyUnusedLocal
     def after_merge_index(self, candle_df, symbol, factor_dict, data_dict) -> Tuple[pd.DataFrame, dict, dict]:
         return candle_df, factor_dict, data_dict
+
+    def select_by_coin_num(self, df, coin_num):
+        select_range = coin_num if isinstance(coin_num, tuple) else (None, coin_num)
+        select_inclusive = self.select_inclusive if isinstance(self.select_inclusive, tuple) else (
+            self.select_inclusive, self.select_inclusive)
+
+        def get_select_condition(side_select_num, inclusive, is_left):
+            if side_select_num is not None:
+                select_num = df['总币数'] * side_select_num if int(side_select_num) == 0 else side_select_num
+                if is_left:
+                    include_cond = (df['rank'] >= select_num) if inclusive != 'right' else (df['rank'] > select_num)
+                else:
+                    include_cond = (df['rank'] <= select_num) if inclusive != 'left' else (df['rank'] < select_num)
+            else:
+                include_cond = pd.Series([True] * len(df), index=df.index)
+            return include_cond
+
+        # Calculate conditions for left and right sides
+        left_condition = get_select_condition(select_range[0], select_inclusive[0], is_left=True)
+        right_condition = get_select_condition(select_range[1], select_inclusive[1], is_left=False)
+
+        return df[left_condition & right_condition].copy(False)

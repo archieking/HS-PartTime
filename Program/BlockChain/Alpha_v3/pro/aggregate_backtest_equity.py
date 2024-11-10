@@ -48,7 +48,7 @@ if __name__ == '__main__':
         # 针对回测组和进行聚合
         # all_rtn_files = (backtest_path / backtest_name).rglob(f'策略评价.csv')
         # 针对遍历的各种组合进行聚合
-        all_rtn_files = (backtest_iter_path / backtest_name).rglob(f'参数组合*/策略评价.csv')
+        all_rtn_files = (backtest_iter_path / backtest_name).rglob(f'策略组*/策略评价.csv')
 
         for rtn_file in all_rtn_files:
             config: BacktestConfig = pd.read_pickle(rtn_file.parent / 'config.pkl')
@@ -58,12 +58,12 @@ if __name__ == '__main__':
             _df['backtest_name'] = backtest_full_name
             _df['path'] = rtn_file
             # 把策略参数装进去
-            for k, v in config.get_strategy_config_sheet().items():
+            for k, v in config.get_strategy_config_sheet(sep_filter=True).items():
                 # 排除""#FACTOR-"开头的k
-                if k.startswith("#FACTOR-g_"):  # 因为j神的因子说g_开头的，所以这部分逻辑并不是通用的
+                if k.startswith("#FACTOR-"):  # 因为j神的因子说g_开头的，所以这部分逻辑并不是通用的
                     _df["选币因子"] = k[8:]
                     _df["因子参数"] = v
-                elif k.startswith("#FACTOR-"):
+                elif k.startswith("#FILTER-"):
                     _df["过滤因子"] = k[8:]
                     _df["过滤参数"] = v
                 else:

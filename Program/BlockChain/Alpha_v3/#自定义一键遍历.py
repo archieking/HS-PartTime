@@ -44,22 +44,22 @@ if __name__ == '__main__':
     logger.debug(f'BUILD VERSION: {build_version}')
     logger.info(f'系统启动中，稍等...')
 
-    factor = 'Adapt_err_xqq'
-    sl_coin_list = [1, 2]
-    is_use_spot = False
-    ascending = False
-    plot_type = 'Y'
-    filter_list = []
-    long_filter_list = [
+    factor = 'MTM案例'  # 因子名称
+    sl_coin_list = [1, 2]  # 选币数量
+    is_use_spot = False  # 是否使用现货
+    ascending = False  # 因子值排序方式，true是从小到打排序，false是从大到小排序
+    plot_type = 'Y'  # 参数平原图，Y是年度参数平原图，Q是年度参数平原图，M是年度参数平原图，
+    filter_list = []  # 统一过滤条件
+    long_filter_list = [  # 多头过滤条件
         ('涨跌幅max', 24, 'val:<=0.2'),  # 因子名（和factors文件中相同），参数 rank排名 val数值 pct百分比
     ]
-    short_filter_list = [
+    short_filter_list = [  # 空头过滤条件
         ('涨跌幅max', 24, 'val:<=0.2')  # 因子名（和factors文件中相同），参数
     ]
 
     strategies = []
     for sl_coin in sl_coin_list:
-        for factor_para in [_ for _ in range(10, 201, 10)]:
+        for factor_para in [_ for _ in range(10, 201, 10)]:  # 因子参数遍历的范围
             strategy = {
                 "strategy": "Strategy_Base",
                 "offset_list": [0],

@@ -185,7 +185,7 @@ def process_candle_df(candle_df: pd.DataFrame, conf: BacktestConfig, factor_col_
     factor_dict = {'first_candle_time': 'first', 'last_candle_time': 'last'}
     for strategy in conf.strategy_list:
         symbol = candle_df['symbol'].iloc[-1]
-        df, _factor_dict, _ = strategy.after_merge_index(candle_df, symbol, factor_dict, {})
+        candle_df, _factor_dict, _ = strategy.after_merge_index(candle_df, symbol, factor_dict, {})
         factor_dict.update(_factor_dict)
 
     # 计算平均开盘价格
@@ -311,32 +311,22 @@ def calc_select_factor_rank(df, factor_column='因子', ascending=True):
     return df
 
 
-def select_long_and_short_coin(
-        long_df, short_df, long_select_coin_num, short_select_coin_num,
-        long_factor, short_factor, long_cap_weight, short_cap_weight):
+def select_long_and_short_coin(strategy: StrategyConfig, long_df: pd.DataFrame, short_df: pd.DataFrame):
     """
     选币，添加多空资金权重后，对于无权重的情况，减少选币次数
+
+    :param strategy:                策略，包含：多头选币数量，空头选币数量，做多因子名称，做空因子名称，多头资金权重，空头资金权重
     :param long_df:                 多头选币的df
     :param short_df:                空头选币的df
-    :param long_select_coin_num:    多头选币数量
-    :param short_select_coin_num:   空头选币数量
-    :param long_factor:             做多因子名称
-    :param short_factor:            做空因子名称
-    :param long_cap_weight:         多头资金权重
-    :param short_cap_weight:        空头资金权重
     :return:
     """
     """
     # 做多选币
     """
-    if long_cap_weight > 0:
-        long_df = calc_select_factor_rank(long_df, factor_column=long_factor, ascending=True)
+    if strategy.long_cap_weight > 0:
+        long_df = calc_select_factor_rank(long_df, factor_column=strategy.long_factor, ascending=True)
 
-        if int(long_select_coin_num) == 0:
-            # 百分比选币模式
-            long_df = long_df[long_df['rank'] <= long_df['总币数'] * long_select_coin_num]
-        else:
-            long_df = long_df[long_df['rank'] <= long_select_coin_num]
+        long_df = strategy.select_by_coin_num(long_df, strategy.long_select_coin_num)
 
         long_df['方向'] = 1
         long_df['target_alloc_ratio'] = 1 / long_df.groupby('candle_begin_time')['symbol'].transform('size')
@@ -346,10 +336,10 @@ def select_long_and_short_coin(
     """
     # 做空选币
     """
-    if short_cap_weight > 0:
-        short_df = calc_select_factor_rank(short_df, factor_column=short_factor, ascending=False)
+    if strategy.short_cap_weight > 0:
+        short_df = calc_select_factor_rank(short_df, factor_column=strategy.short_factor, ascending=False)
 
-        if short_select_coin_num == 'long_nums':  # 如果参数是long_nums，则空头与多头的选币数量保持一致
+        if strategy.short_select_coin_num == 'long_nums':  # 如果参数是long_nums，则空头与多头的选币数量保持一致
             # 获取到多头的选币数量并整理数据
             long_select_num = long_df.groupby('candle_begin_time')['symbol'].size().to_frame()
             long_select_num = long_select_num.rename(columns={'symbol': '多头数量'}).reset_index()
@@ -359,12 +349,7 @@ def select_long_and_short_coin(
             short_df = short_df[short_df['rank'] <= short_df['多头数量']]
             del short_df['多头数量']
         else:
-            # 百分比选币
-            if int(short_select_coin_num) == 0:
-                short_df = short_df[short_df['rank'] <= short_df['总币数'] * short_select_coin_num]
-            # 固定数量选币
-            else:
-                short_df = short_df[short_df['rank'] <= short_select_coin_num]
+            short_df = strategy.select_by_coin_num(short_df, strategy.short_select_coin_num)
 
         short_df['方向'] = -1
         short_df['target_alloc_ratio'] = 1 / short_df.groupby('candle_begin_time')['symbol'].transform('size')
@@ -401,13 +386,11 @@ def select_coins_by_strategy(factor_df, stg_conf: StrategyConfig):
 
     """
     4.2 计算目标选币因子
-    - 计算详情在 `strategy -> *.py`
     """
     s = time.time()
     # 缓存计算前的列名
     prev_cols = factor_df.columns
     # 计算因子
-    # result_df = stg_conf.calc_factor(factor_df, external_list=stg_conf.factor_list)
     result_df = stg_conf.calc_select_factor(factor_df)
     # 合并新的因子
     factor_df = factor_df[prev_cols].join(result_df[list(set(result_df.columns) - set(prev_cols))])
@@ -415,10 +398,8 @@ def select_coins_by_strategy(factor_df, stg_conf: StrategyConfig):
 
     """
     4.3 前置过滤筛选
-    - 计算详情在 `strategy -> *.py`
     """
     s = time.time()
-    # long_df, short_df = stg_conf.before_filter(factor_df, ex_filter_list=stg_conf.filter_list)
     long_df, short_df = stg_conf.filter_before_select(factor_df)
     if stg_conf.is_use_spot:  # 使用现货数据，则在现货中进行过滤，并选币
         short_df = short_df[short_df['symbol_swap'] != '']  # 保留有合约的现货
@@ -428,15 +409,8 @@ def select_coins_by_strategy(factor_df, stg_conf: StrategyConfig):
     4.4 根据选币因子进行选币
     """
     s = time.time()
-    factor_df = select_long_and_short_coin(
-        long_df, short_df,  # 多头选币数据、空头选币数据
-        stg_conf.long_select_coin_num,  # 多头选多少个币
-        stg_conf.short_select_coin_num,  # 空头选多少个币
-        long_factor=stg_conf.long_factor,  # 多头选币因子
-        short_factor=stg_conf.short_factor,  # 空头选币因子
-        long_cap_weight=stg_conf.long_cap_weight,  # 多头比例
-        short_cap_weight=stg_conf.short_cap_weight,  # 空头比例
-    )
+    # 多头选币数据、空头选币数据、策略配置
+    factor_df = select_long_and_short_coin(stg_conf, long_df, short_df)
     logger.debug(f'[{stg_conf.name}] 多空选币耗时：{time.time() - s:.2f}s')
 
     """
@@ -515,12 +489,12 @@ def process_strategy(stg_conf: StrategyConfig, result_folder: Path):
     select_result_df['strategy'] = pd.Categorical(select_result_df['strategy'])
 
     # 根据策略资金权重，调整目标分配比例
-    select_result_df['cap_weight'] = np.float16(stg_conf.cap_weight)
-    select_result_df['target_alloc_ratio'] = (
-            select_result_df['target_alloc_ratio']
-            * select_result_df['cap_weight']
-            / len(stg_conf.offset_list)
-            * select_result_df['方向']
+    select_result_df['cap_weight'] = np.float64(stg_conf.cap_weight)
+    select_result_df['target_alloc_ratio'] = np.float64(
+        select_result_df['target_alloc_ratio']
+        * select_result_df['cap_weight']
+        / len(stg_conf.offset_list)
+        * select_result_df['方向']
     )
 
     # 缓存到本地文件

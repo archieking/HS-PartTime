@@ -36,7 +36,7 @@ print(b)  # 输出: [4, 5, 6]，因为 a 和 b 引用的是同一个列表，修
 ```
 
 如果直接用 `a = [4, 5, 6]` 替换 `[:]` 操作，那么 `b` 就不会受到影响，因为 `a` 重新指向了一个新的列表对象。
-> t9m
+> 40rd
 """
 
 
@@ -56,7 +56,7 @@ class Simulator:
     def __init__(self, init_capital, lot_sizes, fee_rate, init_lots, min_order_limit):
         """
         初始化
-        :param init_capital: 初始资金 
+        :param init_capital: 初始资金
         :param lot_sizes: 每个币种的最小下单量
         :param fee_rate: 手续费率
         :param init_lots: 初始持仓
@@ -193,5 +193,8 @@ class Simulator:
         # 最新价为收盘价
         self.fill_last_prices(close_prices)
 
+        mask = np.logical_and(self.lots != 0, np.logical_not(np.isnan(close_prices)))
+        pos_val = self.lot_sizes[mask] * self.lots[mask] * close_prices[mask]
+
         # 返回收盘账户权益
-        return self.equity
+        return self.equity, pos_val

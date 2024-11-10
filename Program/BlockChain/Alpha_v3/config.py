@@ -14,31 +14,31 @@ from core.utils.path_kit import get_folder_path
 # ====================================================================================================
 # region 回测策略细节配置
 start_date = '2020-01-01'  # 回测开始时间
-end_date = '2024-10-25'  # 回测结束时间
+end_date = '2024-11-10'  # 回测结束时间
 
 backtest_name = '回测组'  # 回测组名称。可以自己任意取。一般建议，一个回测组，就是实盘中的一个账户。
 
 """策略配置"""
 strategy_list = [
     {
-        "strategy": "Strategy_Base",
-        "offset_list": [0],
-        "hold_period": "1H",
-        "is_use_spot": True,
-        "long_select_coin_num": 1,
-        "short_select_coin_num": 1,
-        "cap_weight": 1,
+        "strategy": "Strategy_Base",  # 策略名称
+        "offset_list": [0],  # 时间周期偏移
+        "hold_period": "1H",  # 持仓周期
+        "is_use_spot": False,  # 是否使用现货
+        "long_select_coin_num": 1,  # 多头选币数量
+        "short_select_coin_num": 1,  # 空头选币数量
+        "cap_weight": 1,  # 策略整体资金占比
         "long_cap_weight": 1,  # 多头资金占比
         "short_cap_weight": 1,  # 空头资金占比
         "factor_list": [
-            ('涨跌幅max', False, 100, 1)  # 因子名（和factors文件中相同），排序方式，参数，权重。
+            ('MTM案例', False, 100, 1)  # 因子名（和factors文件中相同），排序方式，参数，权重。
         ],
         "long_filter_list": [
-            # ('涨跌幅max', 24, 'val:<=0.2'),  # 因子名（和factors文件中相同），参数 rank排名 val数值 pct百分比
-            # ('VolumeMix', 24, 'pct:<=0.2', False)  # 因子名（和factors文件中相同），参数
+            ('涨跌幅max', 24, 'val:<=0.2'),  # 因子名（和factors文件中相同），参数 rank排名 val数值 pct百分比
+            # ('VolumeMix', 24, 'pct:<=0.2', False)  # 因子名（和factors文件中相同），参数 rank排名 val数值 pct百分比，排序
         ],
         "short_filter_list": [
-            # ('涨跌幅max', 24, 'val:<=0.2')  # 因子名（和factors文件中相同），参数
+            ('涨跌幅max', 24, 'val:<=0.2')  # 因子名（和factors文件中相同），参数 rank排名 val数值 pct百分比
         ],
         "use_custom_func": False  # 使用系统内置因子计算、过滤函数
     }
@@ -46,7 +46,7 @@ strategy_list = [
 ]
 
 factor_param_range_dict = {
-    '涨跌幅max': [_ for _ in range(10, 201, 10)],
+    'MTM案例': [_ for _ in range(10, 201, 10)],
 }
 
 # 查看参数平原的图表类型
@@ -92,8 +92,12 @@ factor_col_limit = 64  # 内存优化选项，一次性计算多少列因子。6
 # - 如果是在16GB内存下跑纯合约策略，则可以考虑将其提升到 128，毕竟数值越高计算速度越快。
 # - 以上数据仅供参考，具体值会根据机器配置、策略复杂性、回测周期等有所不同。建议大家根据实际情况，逐步测试自己机器的性能极限，找到适合的最优值。
 
+# 数据的绝对路径
+pre_data_path = r'/Users/archie/Projects/Quant/GitHub/Quant/Program/BCrypto/AlphaMain/AlphaMain_Backtest/Alpha_V3_Backtest/data'
+raw_data_path = Path(get_folder_path(pre_data_path))
+# 数据的相对路径
+# raw_data_path = Path(get_folder_path('data'))
 
-raw_data_path = Path(get_folder_path('data'))
 # 现货数据路径
 spot_path = raw_data_path / 'spot_dict.pkl'
 # 合约数据路径

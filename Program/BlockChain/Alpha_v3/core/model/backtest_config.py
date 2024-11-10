@@ -218,7 +218,7 @@ class BacktestConfig:
                 as_path_type=True
             )
 
-    def get_strategy_config_sheet(self, with_factors=True) -> dict:
+    def get_strategy_config_sheet(self, with_factors=True, sep_filter=False) -> dict:
         factor_dict = {}
         for stg in self.strategy_list:
             for attr_in in ['hold_period', 'is_use_spot', 'offset_list', 'cap_weight']:
@@ -227,7 +227,11 @@ class BacktestConfig:
                 factor_dict[attr_in].append(getattr(stg, attr_in))
 
             for factor_config in stg.all_factors:
-                _name = f'#FACTOR-{factor_config.name}'
+                if sep_filter:
+                    factor_type = 'FACTOR' if isinstance(factor_config, FactorConfig) else 'FILTER'
+                    _name = f'#{factor_type}-{factor_config.name}'
+                else:
+                    _name = f'#FACTOR-{factor_config.name}'
                 _val = factor_config.param
                 if _name not in factor_dict:
                     factor_dict[_name] = []

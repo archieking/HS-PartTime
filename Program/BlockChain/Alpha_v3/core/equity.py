@@ -82,7 +82,7 @@ def calc_equity(conf: BacktestConfig,
     # 开始策马奔腾啦 🐎
     # ====================================================================================================
     s_time = time.perf_counter()
-    equities, turnovers, fees, funding_fees, margin_rates = start_simulation(
+    equities, turnovers, fees, funding_fees, margin_rates, long_pos_values, short_pos_values = start_simulation(
         init_capital=conf.initial_usdt,  # 初始资金，单位：USDT
         leverages=leverages,  # 杠杆
         spot_lot_sizes=spot_lot_sizes.to_numpy(),  # 现货最小下单量
@@ -119,6 +119,8 @@ def calc_equity(conf: BacktestConfig,
         'fee': fees,
         'funding_fee': funding_fees,
         'marginRatio': margin_rates,
+        'long_pos_value': long_pos_values,
+        'short_pos_value': short_pos_values
     })
 
     account_df['净值'] = account_df['equity'] / conf.initial_usdt
@@ -126,6 +128,8 @@ def calc_equity(conf: BacktestConfig,
     account_df.loc[account_df['marginRatio'] < conf.margin_rate, '是否爆仓'] = 1
     account_df['是否爆仓'].fillna(method='ffill', inplace=True)
     account_df['是否爆仓'].fillna(value=0, inplace=True)
+    account_df['long_short_ratio'] = account_df['long_pos_value'] / (account_df['short_pos_value'] + 1e-8)
+    account_df['leverage_ratio'] = (account_df['long_pos_value'] + account_df['short_pos_value']) / account_df['equity']
 
     # 策略评价
     rtn, year_return, month_return, quarter_return = strategy_evaluate(account_df, net_col='净值', pct_col='涨跌幅')
@@ -134,7 +138,7 @@ def calc_equity(conf: BacktestConfig,
     return account_df, rtn, year_return, month_return, quarter_return
 
 
-def show_plot_performance(conf: BacktestConfig, account_df, rtn, year_return, title_prefix=''):
+def show_plot_performance(conf: BacktestConfig, account_df, rtn, year_return, title_prefix='', **kwargs):
     all_swap = pd.read_pickle(swap_path)
     btc_df = all_swap['BTC-USDT']
     account_df = pd.merge(left=account_df,
@@ -168,7 +172,11 @@ def show_plot_performance(conf: BacktestConfig, account_df, rtn, year_return, ti
     del account_df['close'], account_df['ETH涨跌幅']
 
     # 生成画图数据字典，可以画出所有offset资金曲线以及各个offset资金曲线
-    data_dict = {'多空资金曲线': '净值', 'BTC资金曲线': 'BTC资金曲线', 'ETH资金曲线': 'ETH资金曲线'}
+    data_dict = {'多空资金曲线': '净值'}
+    for col_name, col_series in kwargs.items():
+        account_df[col_name] = col_series
+        data_dict[col_name] = col_name
+    data_dict.update({'BTC资金曲线': 'BTC资金曲线', 'ETH资金曲线': 'ETH资金曲线'})
     right_axis = {'多空最大回撤': '净值dd2here'}
 
     # 如果画多头、空头资金曲线，同时也会画上回撤曲线
@@ -181,7 +189,7 @@ def show_plot_performance(conf: BacktestConfig, account_df, rtn, year_return, ti
                              right_axis=right_axis,
                              title=pic_title,
                              desc=pic_desc,
-                             path=conf.get_result_folder() / '资金曲线.html')
+                             path=conf.get_result_folder() / f'{title_prefix}资金曲线.html')
 
 
 def read_lot_sizes(path, symbols):
@@ -206,23 +214,6 @@ def align_pivot_dimensions(market_pivot_dict, symbols, candle_begin_times):
     :return:
     """
     return {k: df.loc[candle_begin_times, symbols] for k, df in market_pivot_dict.items()}
-
-
-@nb.njit
-def calc_lots(equity, close_prices, ratios, lot_sizes):
-    """
-    计算每个币种的目标手数
-    :param equity: 总权益
-    :param close_prices: 收盘价
-    :param ratios: 每个币种的资金比例
-    :param lot_sizes: 每个币种的最小下单量
-    :return: 每个币种的目标手数
-    """
-    pos_equity = equity * ratios
-    mask = np.abs(pos_equity) > 0.01
-    target_lots = np.zeros(len(close_prices), dtype=np.int64)
-    target_lots[mask] = (pos_equity[mask] / close_prices[mask] / lot_sizes[mask]).astype(np.int64)
-    return target_lots
 
 
 @nb.jit(nopython=True, boundscheck=True)
@@ -272,6 +263,8 @@ def start_simulation(init_capital, leverages, spot_lot_sizes, swap_lot_sizes, sp
     equities = np.zeros(n_bars, dtype=np.float64)  # equity after execution
     funding_fees = np.zeros(n_bars, dtype=np.float64)
     margin_rates = np.zeros(n_bars, dtype=np.float64)
+    long_pos_values = np.zeros(n_bars, dtype=np.float64)
+    short_pos_values = np.zeros(n_bars, dtype=np.float64)
 
     # ====================================================================================================
     # 2. 初始化模拟对象
@@ -321,8 +314,14 @@ def start_simulation(init_capital, leverages, spot_lot_sizes, swap_lot_sizes, sp
 
         """3. 模拟K线结束on_close"""
         # 根据收盘价格，计算账户权益
-        equity_spot_close = sim_spot.on_close(spot_close_p[i])
-        equity_swap_close = sim_swap.on_close(swap_close_p[i])
+        equity_spot_close, pos_value_spot_close = sim_spot.on_close(spot_close_p[i])
+        equity_swap_close, pos_value_swap_close = sim_swap.on_close(swap_close_p[i])
+
+        long_pos_value = (np.sum(pos_value_spot_close[pos_value_spot_close > 0]) +
+                          np.sum(pos_value_swap_close[pos_value_swap_close > 0]))
+
+        short_pos_value = -(np.sum(pos_value_spot_close[pos_value_spot_close < 0]) +
+                            np.sum(pos_value_swap_close[pos_value_swap_close < 0]))
 
         # 把中间结果更新到之前初始化的空间
         funding_fees[i] = funding_fee
@@ -330,6 +329,8 @@ def start_simulation(init_capital, leverages, spot_lot_sizes, swap_lot_sizes, sp
         turnovers[i] = turnover_spot + turnover_swap
         fees[i] = fee_spot + fee_swap
         margin_rates[i] = margin_rate
+        long_pos_values[i] = long_pos_value
+        short_pos_values[i] = short_pos_value
 
         # 考虑杠杆
         equity_leveraged = (equity_spot_close + equity_swap_close) * leverages[i]
@@ -337,8 +338,6 @@ def start_simulation(init_capital, leverages, spot_lot_sizes, swap_lot_sizes, sp
         """4. 计算目标持仓"""
         # 并不是所有的时间点都需要计算目标持仓，比如D持仓下，只需要在23点更新0点的目标持仓
         if require_rebalance[i] == 1:
-            # target_lots_spot = calc_lots(equity_leveraged, spot_close_p[i], spot_ratio[i], spot_lot_sizes)
-            # target_lots_swap = calc_lots(equity_leveraged, swap_close_p[i], swap_ratio[i], swap_lot_sizes)
             target_lots_spot, target_lots_swap = pos_calc.calc_lots(equity_leveraged, spot_close_p[i], sim_spot.lots,
                                                                     spot_ratio[i], swap_close_p[i], sim_swap.lots,
                                                                     swap_ratio[i])
@@ -346,4 +345,4 @@ def start_simulation(init_capital, leverages, spot_lot_sizes, swap_lot_sizes, sp
             sim_spot.set_target_lots(target_lots_spot)
             sim_swap.set_target_lots(target_lots_swap)
 
-    return equities, turnovers, fees, funding_fees, margin_rates
+    return equities, turnovers, fees, funding_fees, margin_rates, long_pos_values, short_pos_values

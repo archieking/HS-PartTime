@@ -60,7 +60,7 @@ def update(proxies=None):
 
 
 if __name__ == '__main__':
-    update({
-        'http': 'http://127.0.0.1:7890',
-        'https': 'http://127.0.0.1:7890',
-    })
+    update()
+
+    # 如果你本地开了Clash的代理，可以这样更新
+    # update({'http': 'http://127.0.0.1:1087', 'https': 'http://127.0.0.1:1087'})
