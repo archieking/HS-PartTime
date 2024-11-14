@@ -44,7 +44,9 @@ if __name__ == '__main__':
     logger.debug(f'BUILD VERSION: {build_version}')
     logger.info(f'系统启动中，稍等...')
 
-    factor = 'MTM案例'  # 因子名称
+    factor = '参数60～100'  # 因子名称
+    factor_para_list = [_ for _ in range(60, 101, 1)]  # 因子参数遍历的范围
+    # factor_para_list = [_ for _ in range(10, 201, 10)]  # 因子参数遍历的范围
     sl_coin_list = [1, 2]  # 选币数量
     is_use_spot = False  # 是否使用现货
     ascending = False  # 因子值排序方式，true是从小到打排序，false是从大到小排序
@@ -59,7 +61,7 @@ if __name__ == '__main__':
 
     strategies = []
     for sl_coin in sl_coin_list:
-        for factor_para in [_ for _ in range(10, 201, 10)]:  # 因子参数遍历的范围
+        for factor_para in factor_para_list:
             strategy = {
                 "strategy": "Strategy_Base",
                 "offset_list": [0],

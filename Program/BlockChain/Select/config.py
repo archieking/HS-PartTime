@@ -92,11 +92,11 @@ factor_col_limit = 64  # 内存优化选项，一次性计算多少列因子。6
 # - 如果是在16GB内存下跑纯合约策略，则可以考虑将其提升到 128，毕竟数值越高计算速度越快。
 # - 以上数据仅供参考，具体值会根据机器配置、策略复杂性、回测周期等有所不同。建议大家根据实际情况，逐步测试自己机器的性能极限，找到适合的最优值。
 
+# 数据的相对路径
+# raw_data_path = Path(get_folder_path('data'))
 # 数据的绝对路径
 pre_data_path = r'/Users/archie/Projects/Quant/GitHub/Quant/Program/BCrypto/AlphaMain/AlphaMain_Backtest/Alpha_V3_Backtest/data'
 raw_data_path = Path(get_folder_path(pre_data_path))
-# 数据的相对路径
-# raw_data_path = Path(get_folder_path('data'))
 
 # 现货数据路径
 spot_path = raw_data_path / 'spot_dict.pkl'

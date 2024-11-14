@@ -1,8 +1,5 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
-import pandas as pd
-import numpy  as np
-    #21231
 
 # 名字：MTM案例
 # 选币：1,2
