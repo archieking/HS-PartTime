@@ -160,5 +160,10 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
-/Program/BlockChain/Alpha_v3/.idea
+/Program/BlockChain/Select/.idea
 /.idea
+/Program/BlockChain/Select/data/回测结果
+/Program/BlockChain/Select/data/遍历结果
+/Program/BlockChain/Select/logs
+*.html
+Program/BlockChain/Select/data/timestamp.txt
