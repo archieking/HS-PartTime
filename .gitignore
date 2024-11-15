@@ -167,3 +167,8 @@ cython_debug/
 /Program/BlockChain/Select/logs
 *.html
 Program/BlockChain/Select/data/timestamp.txt
+Program/BlockChain/Shift/data/timestamp.txt
+/Program/BlockChain/Shift/.idea
+/Program/BlockChain/Shift/data/回测结果
+/Program/BlockChain/Shift/data/遍历结果
+/Program/BlockChain/Shift/logs
