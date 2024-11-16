@@ -49,6 +49,9 @@ factor_param_range_dict = {
     'MTM案例': [_ for _ in range(10, 201, 10)],
 }
 
+# 择时策略用到
+# re_timing = {'name': 'MovingAverage', 'params': [190]}
+
 # 查看参数平原的图表类型
 # - Y  每年参数平原
 # - M  每月参数平原
@@ -95,7 +98,7 @@ factor_col_limit = 64  # 内存优化选项，一次性计算多少列因子。6
 # 数据的相对路径
 # raw_data_path = Path(get_folder_path('data'))
 # 数据的绝对路径
-pre_data_path = r'/Users/archie/Projects/Quant/GitHub/Quant/Program/BCrypto/AlphaMain/AlphaMain_Backtest/Alpha_V3_Backtest/data'
+pre_data_path = r'/Users/archie/Projects/Quant/GitHub/Quant/Program/BCrypto/AlphaMain/AlphaMain_Backtest/Select_Backtest/data'
 raw_data_path = Path(get_folder_path(pre_data_path))
 
 # 现货数据路径
